@@ -3,7 +3,7 @@
 You T, Wang W, Tesfamariam S. Effects of self-centering structural systems on regional seismic resilience. Engineering Structures, 2023, 274: 115125.
 
 ## Dependancy
-* python lib
+* python lib: 
 pandas, tqdm, numpy, openseespy, eqsig, matplotlib
  
 ## Tutorial
