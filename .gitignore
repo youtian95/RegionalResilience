@@ -1,0 +1,6 @@
+/assessment/*
+!/assessment/BuildingData/
+!/assessment/EQData/
+!/assessment/IMSim.exe
+!/assessment/HazusData Table 5.1.csv
+!/assessment/*.m
