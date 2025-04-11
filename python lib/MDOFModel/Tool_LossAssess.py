@@ -18,22 +18,31 @@
 
 import argparse
 import sys
-import os
 from pathlib import Path
 
 import pandas as pd
 import numpy as np
 
-import MDOF_LU as mlu
-import MDOFOpenSees as mops
-import BldLossAssessment as bl
-import IDA
+from . import MDOF_LU as mlu
+from . import MDOFOpenSees as mops
+from . import BldLossAssessment as bl
+from . import IDA
+from . import Alpha_CNcode as ACN
 
 def DynamicAnalysis_1Sim(NumofStories,FloorArea,StructuralType,OccupancyClass,
-    DesignLevel,EQRecordFile,EQScaling,OutputDir,SelfCenteringEnhancingFactor):
+    DesignInfo,EQRecordFile,EQScaling,OutputDir,SelfCenteringEnhancingFactor):
 
-    bld = mlu.MDOF_LU(NumofStories, FloorArea, StructuralType)
-    bld.set_DesignLevel(DesignLevel)
+    if DesignInfo['Code'] == 'Hazus':
+        bld = mlu.MDOF_LU(NumofStories, FloorArea, StructuralType, 
+                          SeismicDesignLevel=DesignInfo['SeismicDesignLevel'])
+    elif DesignInfo['Code'] == 'CN':
+        bld = mlu.MDOF_CN(NumofStories, FloorArea, StructuralType, 
+            SeismicDesignLevel=DesignInfo['SeismicDesignLevel'], 
+            EQGroup=DesignInfo['EQgroup'], 
+            SiteClass=DesignInfo['SiteClass'])  
+    else:
+        print('ERROR: wrong DesignInfo')
+        return
     # bld.OutputStructuralParameters('structural parameters')
 
     fe = mops.MDOFOpenSees(NumofStories, [bld.mass]*bld.N, [bld.K0]*bld.N, bld.DampingRatio,
@@ -42,6 +51,9 @@ def DynamicAnalysis_1Sim(NumofStories,FloorArea,StructuralType,OccupancyClass,
     fe.DynamicAnalysis(EQRecordFile, EQScaling)
     # fe.PlotForceDriftHistory(1)
 
+    DesignLevel = DesignInfo['SeismicDesignLevel']
+    if DesignInfo['Code'] == 'CN':
+        DesignLevel = ACN.Concert_CN2Hazus_SeismicDesignLevel(DesignInfo['SeismicDesignLevel'])
     blo = bl.BldLossAssessment(NumofStories, FloorArea,StructuralType,DesignLevel,OccupancyClass)
     blo.LossAssessment([fe.MaxDrift.max()],[fe.MaxAbsAccel.max()/9.8])  
 
@@ -61,9 +73,10 @@ def DynamicAnalysis_1Sim(NumofStories,FloorArea,StructuralType,OccupancyClass,
     df.to_csv(Path(OutputDir).joinpath('BldLoss.csv'),index=0)
 
 def Simulate_losses_given_IM_basedon_IDA(IDA_result,IM_list,N_Sim,betaM,OutputDir,
-    NumofStories,FloorArea,StructuralType,DesignLevel,OccupancyClass):
+    NumofStories,FloorArea,StructuralType,DesignInfo,OccupancyClass) -> tuple[pd.DataFrame,pd.DataFrame]:
 
     IDA_result = pd.read_csv(Path(IDA_result))
+    IDA_result['Iffinish'] = IDA_result['Iffinish'].astype(bool)
     IDA_result = IDA_result.loc[:, ~IDA_result.columns.str.contains('^Unnamed')]
     IDA_result = IDA_result.loc[IDA_result['Iffinish']==1,:]  
     for ind,row in IDA_result.iterrows():
@@ -75,12 +88,17 @@ def Simulate_losses_given_IM_basedon_IDA(IDA_result,IM_list,N_Sim,betaM,OutputDi
     if len(N_Sim)==1:
         N_Sim = N_Sim[0]
     SimEDP = IDA.SimulateEDPGivenIM(IDA_result,IM_list,N_Sim,betaM)
-    SimEDP.to_csv(Path(OutputDir)/'SimEDP.csv')
+    if OutputDir is not None:
+        SimEDP.to_csv(Path(OutputDir)/'SimEDP.csv')
 
+    DesignLevel = DesignInfo['SeismicDesignLevel']
+    if DesignInfo['Code'] == 'CN':
+        DesignLevel = ACN.Concert_CN2Hazus_SeismicDesignLevel(DesignInfo['SeismicDesignLevel'])
     blo = bl.BldLossAssessment(NumofStories, FloorArea,StructuralType,DesignLevel,OccupancyClass)
     blo.LossAssessment(SimEDP['MaxDrift'].tolist(),(SimEDP['MaxAbsAccel']/9.8).tolist(),
         SimEDP['ResDrift'].tolist())  
     data = {
+        'IM': SimEDP['IM'].tolist(),
         'DS_Struct': blo.DS_Struct, 
         'DS_NonStruct_DriftSen':blo.DS_NonStruct_DriftSen,
         'DS_NonStruct_AccelSen': blo.DS_NonStruct_AccelSen,
@@ -93,7 +111,10 @@ def Simulate_losses_given_IM_basedon_IDA(IDA_result,IM_list,N_Sim,betaM,OutputDi
         'FunctionLossTime': blo.FunctionLossTime
     }
     df = pd.DataFrame(data)
-    df.to_csv(Path(OutputDir)/'BldLoss.csv')
+    if OutputDir is not None:
+        df.to_csv(Path(OutputDir)/'BldLoss.csv')
+
+    return SimEDP, df
 
 
 def main(args):
@@ -117,18 +138,18 @@ def main(args):
     parser.add_argument('--FloorArea',type=float)
     parser.add_argument('--StructuralType')
     parser.add_argument('--OccupancyClass')
-    parser.add_argument('--DesignLevel',default = 'moderate-code')
+    parser.add_argument('--DesignInfo', type=dict)
 
     args = parser.parse_args(args)
 
     if not args.EQRecordFile is None:
         DynamicAnalysis_1Sim(args.NumofStories,args.FloorArea,args.StructuralType,
-            args.OccupancyClass,args.DesignLevel,args.EQRecordFile,
+            args.OccupancyClass,args.DesignInfo,args.EQRecordFile,
             args.EQScaling,args.OutputDir,args.SelfCenteringEnhancingFactor)
     elif not args.IDA_result is None:
         Simulate_losses_given_IM_basedon_IDA(args.IDA_result,args.IM_list,args.N_Sim,
             args.betaM,args.OutputDir,
-            args.NumofStories,args.FloorArea,args.StructuralType,args.DesignLevel,args.OccupancyClass)
+            args.NumofStories,args.FloorArea,args.StructuralType,args.DesignInfo,args.OccupancyClass)
     else:
         print('ERROR: wrong arguments')
 
@@ -143,7 +164,7 @@ def main(args):
 #     4,
 #     3593.5,
 #     'C1',
-#     'moderate-code',
+#     {'Code': 'Hazus', 'SeismicDesignLevel': 'UNKNOWN'},
 #     'RES1')
 
 

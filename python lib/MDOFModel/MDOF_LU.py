@@ -7,6 +7,7 @@
 # - numpy, pandas
 ########################################################
 
+from pathlib import Path
 import numpy as np
 import pandas as pd
 
@@ -27,10 +28,12 @@ class MDOF_LU:
     mass = 0    # kg
     K0 = 0      # N/m
     T1 = 0      # s
-    T2 = 0      # s
+    # T2 = 0      # s
     N = 0
     DampingRatio = 0.05 # damping ratio
     TypicalStoryHeight = 0 # (m)
+    # design strength coefficient
+    Cs = 0
     # backbone curve
     Vdi = []    # design strength, N
     Vyi = []    # N
@@ -42,26 +45,28 @@ class MDOF_LU:
     # ['Modified-Clough','Kinematic hardening','Pinching']
     HystereticCurveType = 'Modified-Clough' 
 
-    def __init__(self, NumOfStories, FloorArea, StructuralType):
+    def __init__(self, NumOfStories, FloorArea, StructuralType, SeismicDesignLevel = 'UNKNOWN'):
         self.N = NumOfStories
         self.NumOfStories = NumOfStories
         self.FloorArea = FloorArea
         self.__Read_StructuralType(StructuralType)
-
+        if SeismicDesignLevel != 'UNKNOWN':
+            self.__SeismicDesignLevel = SeismicDesignLevel
         self.__Update_DesignLevel()
 
         # read hazus data
-        HazusDataTable5_5 = pd.read_csv("./Resources/HazusData Table 5.5.csv",
+        current_directory = Path(__file__).resolve().parent
+        HazusDataTable5_5 = pd.read_csv(current_directory/"Resources/HazusData Table 5.5.csv",
             index_col='building type')
-        HazusDataTable5_1 = pd.read_csv("./Resources/HazusData Table 5.1.csv",
+        HazusDataTable5_1 = pd.read_csv(current_directory/"Resources/HazusData Table 5.1.csv",
             index_col='building type')
-        HazusDataTable5_4 = pd.read_csv("./Resources/HazusData Table 5.4.csv",
+        HazusDataTable5_4 = pd.read_csv(current_directory/"Resources/HazusData Table 5.4.csv",
             index_col='building type')
-        HazusDataTable5_6 = pd.read_csv("./Resources/HazusData Table 5.6.csv",
+        HazusDataTable5_6 = pd.read_csv(current_directory/"Resources/HazusData Table 5.6.csv",
             index_col='building type')
-        HazusDataTable5_9 = pd.read_csv("./Resources/HazusData Table 5.9.csv",
+        HazusDataTable5_9 = pd.read_csv(current_directory/"Resources/HazusData Table 5.9.csv",
             index_col=0, header=[0,1,2,3])
-        HazusDataTable5_18 = pd.read_csv("./Resources/HazusData Table 5.18.csv",
+        HazusDataTable5_18 = pd.read_csv(current_directory/"Resources/HazusData Table 5.18.csv",
             index_col=0, header=[0,1])
 
         # story mass
@@ -71,7 +76,7 @@ class MDOF_LU:
         T0 = HazusDataTable5_5['typical periods, Te (seconds)'][self.StructuralType]
         N0 = HazusDataTable5_1['typical stories'][self.StructuralType]
         self.T1 = self.N / N0 * T0
-        self.T2 = self.T1/3.0
+        # self.T2 = self.T1/3.0
 
         # elastic stiffness
         UnitMassMat = np.zeros([self.N,self.N])
@@ -105,6 +110,7 @@ class MDOF_LU:
 
         # Vyi, betai, etai
         Cs = HazusDataTable5_4[self.__SeismicDesignLevel][self.StructuralType]
+        self.Cs = Cs
         gamma = HazusDataTable5_5['overstrength ratio, yield, gamma'][self.StructuralType]
         lambda_ = HazusDataTable5_5['overstrength ratio, ultimate, lambda'][self.StructuralType]
         alpha1 = HazusDataTable5_5['modal factor, weight, alpha1'][self.StructuralType]
@@ -147,14 +153,20 @@ class MDOF_LU:
         self.__init__(self.NumOfStories,self.FloorArea,self.StructuralType)
 
     def OutputStructuralParameters(self, filename):
+        if isinstance(filename, str):
+            if not filename.endswith('.csv'):
+                filename = filename + '.csv'
+            filename = Path(filename)
 
         data = {
             'damping ratio': [self.DampingRatio],
             'Hysteretic curve type': [self.HystereticCurveType],
             'Hysteretic parameter, tao': [self.tao],
-            'Typical story height (m)': [self.TypicalStoryHeight]
+            'Typical story height (m)': [self.TypicalStoryHeight],
+            'T1 (s)': self.T1,
+            'Cs': self.Cs
         }
-        pd.DataFrame(data).to_csv(filename +'.csv',index=0,sep=',')
+        pd.DataFrame(data).to_csv(filename,index=0,sep=',')
 
         yileddisp = np.array(self.Vyi)/self.K0
         designforce = np.array(self.Vdi)
@@ -173,13 +185,14 @@ class MDOF_LU:
             'Ultimage displacement (m)': ultdisp.tolist(),
             'Complete damage displacement (m)': self.DeltaCi,
         }
-        pd.DataFrame(data).to_csv(filename +'.csv',index=0,sep=',',mode='a')
+        pd.DataFrame(data).to_csv(filename,index=0,sep=',',mode='a')
 
     def getDesignLevel(self):
         return self.__SeismicDesignLevel
 
     def __Read_StructuralType(self,StructuralType):
-        HazusInventoryTable4_2 = pd.read_csv("./Resources/HazusInventory Table 4-2.csv",
+        current_directory = Path(__file__).resolve().parent
+        HazusInventoryTable4_2 = pd.read_csv(current_directory/"Resources/HazusInventory Table 4-2.csv",
             index_col=0, header=0)
         rownames = HazusInventoryTable4_2.index.to_list()
         rownames_NO_LMH = rownames.copy()
@@ -213,7 +226,8 @@ class MDOF_LU:
             self.StructuralType = StructuralType + ' is UNKNOWN'
 
     def __Update_DesignLevel(self):
-        HazusDataTable5_4 = pd.read_csv("./Resources/HazusData Table 5.4.csv",
+        current_directory = Path(__file__).resolve().parent
+        HazusDataTable5_4 = pd.read_csv(current_directory / "Resources/HazusData Table 5.4.csv",
             index_col='building type')
         Cs = HazusDataTable5_4[self.__SeismicDesignLevel][self.StructuralType]
         if pd.isna(Cs):
@@ -224,4 +238,3 @@ class MDOF_LU:
             self.__SeismicDesignLevel = HazusDataTable5_4.columns[j_col]
 
         
-
