@@ -34,7 +34,7 @@ SiteLat = DataSiteFile(:,3);
 status = system(['IMSim ',EQSourceFile,' ',SiteFile]);
 IM_sim = ReadIMSim(filename,SiteLong,SiteLat);
 %% plot IMs for each building
-i_sim = 1; % indicate the one that is plotted
+i_sim = 2; % indicate the one that is plotted
 plot_bld_IM_sim(filename,IM_sim,i_sim);
 %% plot x-x IM
 i_sim = 1;
@@ -43,8 +43,9 @@ plot_IM_X(0.5,SiteID,SiteLong,SiteLat,i_sim);
 %% seismic losses simulation
 N_sim = 500;
 load('ReprBld.mat');
-IDA_result_dir = 'IDA_results/IDA_results_SC025';
-OutputDir = 'RegionalLossSimulations/RegionalLossSimulations_SC025_RES1';
+IDA_result_dir = 'IDA_results/IDA_results_SC0';
+OutputDir = 'RegionalLossSimulations/RegionalLossSimulations_SC0_RES1';
+% MANUALLY modify Median_RIDR in PythonLibPath/MDOFModel/BldLossAssessment.py
 currentFolder = pwd;
 OutputDir = fullfile(currentFolder,OutputDir);
 [status,msg] = mkdir(OutputDir);
@@ -56,7 +57,7 @@ SimulateLossesBasedonIM_repr(Bld2ReprBld,ReprBld, ...
 %% plot CDF of losses 
 N_sim = 500;
 samples = plot_cdf_regional(AllLossSimResults(1:N_sim,:), ...
-    {'RepairTime','RecoveryTime','FunctionLossTime'}); 
+    {'RepairCost_Total','RepairCost_Struct','RepairCost_NonStruct_DriftSen', 'RepairCost_NonStruct_AccelSen'}); 
 % 'RepairCost_Total','RepairCost_Struct','RepairCost_NonStruct_DriftSen', 'RepairCost_NonStruct_AccelSen'
 % or
 % 'RepairTime','RecoveryTime','FunctionLossTime'

@@ -59,7 +59,8 @@ class BldCluster():
                 repval = LabelGroup_Mid[label][iloc]
                 row[label] = repval
             row_new = row[headersname]
-            InterMdf = InterMdf.append(row_new)
+            # 使用 pd.concat 替代 append
+            InterMdf = pd.concat([InterMdf, pd.DataFrame([row_new])], ignore_index=True)
         
         self.ReprBld = pd.DataFrame()
         self.Bld2ReprBld = pd.DataFrame({'Original Buildings index':InterMdf.index.tolist(), 
@@ -69,7 +70,8 @@ class BldCluster():
         group = InterMdf.groupby(InterMdf.columns.values.tolist())
         i = 0
         for key, value in group:
-            self.ReprBld = self.ReprBld.append(value.iloc[0],ignore_index=True)
+            # 使用 pd.concat 替代 append
+            self.ReprBld = pd.concat([self.ReprBld, pd.DataFrame([value.iloc[0]])], ignore_index=True)
             self.Bld2ReprBld.loc[value.index.values.tolist(),['Representative Buildings index']] = i
             i = i+1
         
@@ -78,10 +80,9 @@ class BldCluster():
 
 
 
-        
 
 
-    
-            
 
-        
+
+
+

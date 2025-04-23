@@ -5,7 +5,6 @@ LongRange = [-122.448346,-122.397862];
 LatRange = [37.780022,37.808717];
 LongRange = (LongRange-LongRange(2))./3+LongRange(2);
 LatRange = (LatRange-LatRange(1))./3+LatRange(1);
-% plot_bld_3D(filename,LongRange,LatRange,[190 190 190]./255);
 
 %% Plot Building Story
 plot_bld_story(filename);
